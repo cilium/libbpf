@@ -205,12 +205,16 @@ enum reloc_type {
 	RELO_EXTERN_VAR,
 	RELO_EXTERN_FUNC,
 	RELO_SUBPROG_ADDR,
+	RELO_BSS,
 };
 
 struct reloc_desc {
 	enum reloc_type type;
 	int insn_idx;
-	int map_idx;
+	union {
+		int map_idx;
+		uint32_t data;
+	};
 	int sym_off;
 };
 
@@ -1470,6 +1474,7 @@ bpf_object__init_internal_map(struct bpf_object *obj, enum libbpf_map_type type,
 	return 0;
 }
 
+#if 0
 static int bpf_object__init_global_data_maps(struct bpf_object *obj)
 {
 	int err;
@@ -1505,7 +1510,7 @@ static int bpf_object__init_global_data_maps(struct bpf_object *obj)
 	}
 	return 0;
 }
-
+#endif
 
 static struct extern_desc *find_extern_by_name(const struct bpf_object *obj,
 					       const void *name)
@@ -2461,7 +2466,9 @@ static int bpf_object__init_maps(struct bpf_object *obj,
 
 	err = bpf_object__init_user_maps(obj, strict);
 	err = err ?: bpf_object__init_user_btf_maps(obj, strict, pin_root_path);
+#if 0
 	err = err ?: bpf_object__init_global_data_maps(obj);
+#endif
 	err = err ?: bpf_object__init_kconfig_map(obj);
 	err = err ?: bpf_object__init_struct_ops_maps(obj);
 
@@ -2618,7 +2625,8 @@ static int bpf_object__finalize_btf(struct bpf_object *obj)
 	err = btf__finalize_data(obj, obj->btf);
 	if (err) {
 		pr_warn("Error finalizing %s: %d.\n", BTF_ELF_SEC, err);
-		return err;
+		//return err;
+		return 0;
 	}
 
 	return 0;
@@ -3721,6 +3729,7 @@ static int bpf_program__record_reloc(struct bpf_program *prog,
 			prog->name, sym_sec_name);
 		return -LIBBPF_ERRNO__RELOC;
 	}
+#if 0
 	for (map_idx = 0; map_idx < nr_maps; map_idx++) {
 		map = &obj->maps[map_idx];
 		if (map->libbpf_type != type)
@@ -3735,11 +3744,26 @@ static int bpf_program__record_reloc(struct bpf_program *prog,
 			prog->name, sym_sec_name);
 		return -LIBBPF_ERRNO__RELOC;
 	}
+#endif
 
-	reloc_desc->type = RELO_DATA;
+	if (shdr_idx == obj->efile.bss_shndx) {
+		reloc_desc->type = RELO_BSS;
+	} else if (shdr_idx == obj->efile.data_shndx) {
+		Elf_Data *glob = obj->efile.data;
+		uint32_t *data;
+
+		data = glob->d_buf + sym->st_value;
+		reloc_desc->data = *data;
+		reloc_desc->type = RELO_DATA;
+	} else {
+		pr_warn("%s unsupported\n", sym_sec_name);
+		return -LIBBPF_ERRNO__RELOC;
+	}
 	reloc_desc->insn_idx = insn_idx;
-	reloc_desc->map_idx = map_idx;
+#if 0
 	reloc_desc->sym_off = sym->st_value;
+	reloc_desc->map_idx = map_idx;
+#endif
 	return 0;
 }
 
@@ -5255,7 +5279,12 @@ bpf_object__relocate_data(struct bpf_object *obj, struct bpf_program *prog)
 				insn[0].imm = obj->maps[relo->map_idx].fd;
 			}
 			break;
+		case RELO_BSS:
+			insn[0].imm = 0;
+			break;
 		case RELO_DATA:
+			insn[0].imm = relo->data;
+#if 0
 			insn[1].imm = insn[0].imm + relo->sym_off;
 			if (obj->gen_loader) {
 				insn[0].src_reg = BPF_PSEUDO_MAP_IDX_VALUE;
@@ -5264,6 +5293,7 @@ bpf_object__relocate_data(struct bpf_object *obj, struct bpf_program *prog)
 				insn[0].src_reg = BPF_PSEUDO_MAP_VALUE;
 				insn[0].imm = obj->maps[relo->map_idx].fd;
 			}
+#endif
 			break;
 		case RELO_EXTERN_VAR:
 			ext = &obj->externs[relo->sym_off];
