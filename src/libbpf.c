@@ -91,6 +91,15 @@ libbpf_print_fn_t libbpf_set_print(libbpf_print_fn_t fn)
 	return old_print_fn;
 }
 
+static size_t __libbpf_max_verifier_log_output = 0;
+
+size_t libbpf_set_max_verifier_log_output(size_t size) {
+	size_t old_max = __libbpf_max_verifier_log_output;
+
+	__libbpf_max_verifier_log_output = size;
+	return old_max;
+}
+
 __printf(2, 3)
 void libbpf_print(enum libbpf_print_level level, const char *format, ...)
 {
@@ -6170,9 +6179,19 @@ retry_load:
 	pr_perm_msg(ret);
 
 	if (log_buf && log_buf[0] != '\0') {
+		size_t off = 0;
+		size_t len;
+
 		ret = -LIBBPF_ERRNO__VERIFY;
 		pr_warn("-- BEGIN DUMP LOG ---\n");
-		pr_warn("\n%s\n", log_buf);
+		if (__libbpf_max_verifier_log_output) {
+			len = strlen(log_buf);
+			if (len > __libbpf_max_verifier_log_output) {
+				off = len - __libbpf_max_verifier_log_output;
+				pr_warn("Skipped %zu bytes from the verifier log\n", off);
+			}
+		}
+		pr_warn("\n%s\n", log_buf + off);
 		pr_warn("-- END LOG --\n");
 	} else if (load_attr.insn_cnt >= BPF_MAXINSNS) {
 		pr_warn("Program too large (%zu insns), at most %d insns\n",

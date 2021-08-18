@@ -58,6 +58,8 @@ typedef int (*libbpf_print_fn_t)(enum libbpf_print_level level,
 
 LIBBPF_API libbpf_print_fn_t libbpf_set_print(libbpf_print_fn_t fn);
 
+LIBBPF_API size_t libbpf_set_max_verifier_log_output(size_t size);
+
 /* Hide internal to user */
 struct bpf_object;
 
