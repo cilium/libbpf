@@ -34,6 +34,8 @@
 extern "C" {
 #endif
 
+int libbpf_set_memlock_rlim(size_t memlock_bytes);
+
 struct bpf_create_map_attr {
 	const char *name;
 	enum bpf_map_type map_type;
